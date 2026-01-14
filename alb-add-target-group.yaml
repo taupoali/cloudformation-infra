@@ -1,0 +1,96 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Add additional target group with host-based routing to existing ALB
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID (same as ALB)
+  
+  HTTPListenerArn:
+    Type: String
+    Description: ARN of the ALB HTTP Listener
+  
+  HTTPSListenerArn:
+    Type: String
+    Description: ARN of the ALB HTTPS Listener
+    Default: ''
+  
+  ACMCertificateArn:
+    Type: String
+    Description: ACM Certificate ARN for HTTPS (leave empty for HTTP only)
+    Default: ''
+  
+  EC2InstanceId:
+    Type: AWS::EC2::Instance::Id
+    Description: EC2 instance for this target group
+  
+  Hostnames:
+    Type: CommaDelimitedList
+    Description: Hostnames for routing (e.g., company.com,www.company.com)
+  
+  Priority:
+    Type: Number
+    Description: Listener rule priority (must be unique, lower = higher priority)
+    MinValue: 1
+    MaxValue: 50000
+
+Conditions:
+  HasHTTPS: !Not [!Equals [!Ref ACMCertificateArn, '']]
+
+Resources:
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VpcId
+      Port: 80
+      Protocol: HTTP
+      TargetType: instance
+      HealthCheckEnabled: true
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Targets:
+        - Id: !Ref EC2InstanceId
+
+  HTTPListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref HTTPListenerArn
+      Priority: !Ref Priority
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values: !Ref Hostnames
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  ListenerCertificate:
+    Type: AWS::ElasticLoadBalancingV2::ListenerCertificate
+    Condition: HasHTTPS
+    Properties:
+      ListenerArn: !Ref HTTPSListenerArn
+      Certificates:
+        - CertificateArn: !Ref ACMCertificateArn
+
+  HTTPSListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: HasHTTPS
+    Properties:
+      ListenerArn: !Ref HTTPSListenerArn
+      Priority: !Ref Priority
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values: !Ref Hostnames
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+Outputs:
+  TargetGroupArn:
+    Description: Target Group ARN
+    Value: !Ref TargetGroup
