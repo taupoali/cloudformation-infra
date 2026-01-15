@@ -84,6 +84,12 @@ Resources:
       SecurityGroupIds:
         - !Ref InstanceSecurityGroup
       IamInstanceProfile: !Ref InstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/sdf
+          Ebs:
+            VolumeSize: 40
+            VolumeType: gp3
+            DeleteOnTermination: true
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-instance'
